@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Создание задач</title>
+  <link rel="stylesheet" href="style.css"/>
+  <link rel="icon" href="bitrix-zayavki-icon.png" type="image/png"/>
+  <style>
+    progress#uploadProgress {
+      appearance: none;
+      -webkit-appearance: none;
+      width: 100%;
+      height: 20px;
+      border: none;
+      border-radius: 10px;
+      background-color: #eee;
+      margin-top: 10px;
+      transition: value 0.3s ease;
+    }
+
+    progress#uploadProgress::-webkit-progress-bar {
+      background-color: #eee;
+      border-radius: 10px;
+    }
+
+    progress#uploadProgress::-webkit-progress-value {
+      background-color: orange;
+      border-radius: 10px;
+      transition: width 0.3s ease;
+    }
+
+    progress#uploadProgress::-moz-progress-bar {
+      background-color: orange;
+      border-radius: 10px;
+      transition: width 0.3s ease;
+    }
+  </style>
+</head>
+<body>
+
+  <form id="bitrixForm" method="post" enctype="multipart/form-data">
+    <h1>Создание задачи для разработчиков</h1>
+
+    <label for="question">Тип задачи</label>
+    <select required name="question" id="question">
+      <option value="" disabled selected>Выберите тип задачи</option>
+      <option value="Смена цены">Смена цены</option>
+      <option value="Новый контент">Новый контент</option>
+      <option value="Правка сайта">Правка сайта</option>
+    </select>
+
+    <label for="fast">Приоритет</label>
+    <select name="fast" id="fast">
+      <option value="Обычное">Обычное</option>
+      <option value="Срочное">Срочное</option>
+    </select>
+
+    <label for="site">Название сайта</label>
+    <input required type="text" name="site" id="site" placeholder="Введите название сайта" />
+
+    <label for="message">Описание задачи</label>
+    <textarea required rows="5" name="message" id="message" placeholder="Опишите задачу"></textarea>
+
+    <label for="files">Прикрепить файлы <span style='font-size:12px; font-weigth:100;'>(не больше 20ти)</span></label>
+    <input type="file" name="files[]" id="files" multiple />
+    <ul id="fileList"></ul>
+
+    <label for="whoQuestion">От какого отдела и чья эта задача</label>
+    <input required type="text" name="whoQuestion" id="whoQuestion" placeholder="Укажите отдел и ваше имя" />
+
+    <label for="date">Срок выполнения</label>
+    <input type="date" name="date" id="date" />
+
+    <input type="submit" value="Отправить" id="submitBtn" />
+    <progress id="uploadProgress" value="0" max="100" style="display:none;"></progress>
+  </form>
+
+  <script>
+    const input = document.getElementById("files");
+    const fileList = document.getElementById("fileList");
+    let selectedFiles = [];
+
+    input.addEventListener("change", function () {
+      for (const file of input.files) {
+        if (
+          !selectedFiles.find(
+            (f) =>
+              f.name === file.name &&
+              f.size === file.size &&
+              f.lastModified === file.lastModified
+          )
+        ) {
+          if (selectedFiles.length >= 20) {
+            alert("❗ Нельзя выбрать больше 20 файлов.");
+            break;
+          }
+          selectedFiles.push(file);
+        }
+      }
+
+      updateDisplay();
+    });
+
+    function updateDisplay() {
+      fileList.innerHTML = "";
+      selectedFiles.forEach((file, index) => {
+        const li = document.createElement("li");
+        li.textContent = `${file.name} (${Math.round(file.size / 1024)} KB)`;
+
+        const removeBtn = document.createElement("button");
+        removeBtn.textContent = "✖";
+        removeBtn.style.marginLeft = "10px";
+        removeBtn.onclick = () => {
+          selectedFiles.splice(index, 1);
+          updateDisplay();
+        };
+
+        li.appendChild(removeBtn);
+        fileList.appendChild(li);
+      });
+
+      updateInputFiles();
+    }
+
+    function updateInputFiles() {
+      const dataTransfer = new DataTransfer();
+      selectedFiles.forEach((file) => dataTransfer.items.add(file));
+      input.files = dataTransfer.files;
+    }
+
+    document.getElementById("bitrixForm").addEventListener("submit", function (event) {
+      event.preventDefault();
+
+      const submitBtn = document.getElementById("submitBtn");
+      const progressBar = document.getElementById("uploadProgress");
+
+      submitBtn.disabled = true;
+      submitBtn.value = "Отправка...";
+      progressBar.style.display = "block";
+      progressBar.value = 0;
+
+      const formData = new FormData(this);
+
+      const xhr = new XMLHttpRequest();
+      xhr.open("POST", "bitrix_upload.php");
+
+      xhr.upload.onprogress = function (event) {
+        if (event.lengthComputable) {
+          const percent = Math.round((event.loaded / event.total) * 100);
+          progressBar.value = percent;
+        }
+      };
+
+      xhr.onload = function () {
+        submitBtn.disabled = false;
+        submitBtn.value = "Отправить";
+        progressBar.style.display = "none";
+
+        try {
+          const data = JSON.parse(xhr.responseText);
+          if (data.success) {
+            alert("✅ " + data.message);
+            document.getElementById("bitrixForm").reset();
+
+            selectedFiles = [];
+            const dataTransfer = new DataTransfer();
+            input.files = dataTransfer.files;
+            updateDisplay();
+          } else {
+            alert("❌ Ошибка: " + data.error);
+          }
+        } catch (e) {
+          alert("❌ Неверный ответ от сервера.");
+        }
+      };
+
+      xhr.onerror = function () {
+        submitBtn.disabled = false;
+        submitBtn.value = "Отправить";
+        progressBar.style.display = "none";
+        alert("❌ Ошибка отправки данных.");
+      };
+
+      xhr.send(formData);
+    });
+  </script>
+</body>
+</html>
